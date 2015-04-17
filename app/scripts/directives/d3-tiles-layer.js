@@ -201,7 +201,7 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window', '$templateCache', '$
             var ergImg = property.erg >=0 ?  options.markeroptions.img.arrowup : options.markeroptions.img.arrowdown;
             var occchangeImg = property.occchange >=0 ? options.markeroptions.img.arrowup : options.markeroptions.img.arrowdown;
 
-            var tooltip = tooltipHtml.replace(/{{image}}/g, "style='background-image: url(" + property.propertythumbnail + ")'")
+            var tooltip = tooltipHtml.replace(/{{propertyid}}/g, property.propertyid)
                 .replace(/{{name}}/g,property.name)
                 .replace(/{{address}}/g,property.address+" " +property.city+" "+ property.st)
                 .replace(/{{rent}}/g, "$"+property.erent.toFixed(2))
@@ -246,6 +246,12 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window', '$templateCache', '$
                     var localTooltip = getTooltipContent(tooltipContent,d.properties);
 
                     google.maps.event.addListener(marker, 'mouseover', function(ev){
+
+                        // no events emit for unvisible markers
+                        if(marker.getOpacity() === 0){
+                            return;
+                        };
+
                         tooltip.html(localTooltip);
                         var ne = overlayProjection.fromLatLngToDivPixel(ev.latLng);
                         tooltip.style("left",(ne.x - options.markeroptions.tooltipWidth/2 + 5)+"px").style("top",(ne.y- options.markeroptions.tooltipHeight - options.markeroptions.iconheight * sizeMap[map.getZoom()] - 3)+"px");
@@ -253,15 +259,33 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window', '$templateCache', '$
                     });
 
                     google.maps.event.addListener(marker, 'mouseout', function(ev){
+
+                        // no events emit for unvisible markers
+                        if(marker.getOpacity() === 0){
+                            return;
+                        };
+
                         tooltip.style("visibility","hidden");
                     });
 
                     google.maps.event.addListener(marker, 'click', function () {
+
+                        // no events emit for unvisible markers
+                        if(marker.getOpacity() === 0){
+                            return;
+                        };
+
                         scope.$emit('markerClicked',{data: d.properties,marker:marker});
                     });
 
                     google.maps.event.addListener(marker,'rightclick',function(e){
-                        scope.$emit('markerRightClicked', {position: overlayProjection.fromLatLngToContainerPixel(e.latLng), latLng: e.latLng, id: markeroptions.id });
+
+                        // no events emit for unvisible markers
+                        if(marker.getOpacity() === 0){
+                            return;
+                        };
+
+                        scope.$emit('markerRightClicked', {position: overlayProjection.fromLatLngToContainerPixel(e.latLng), latLng: e.latLng, id: d.properties[options.markeroptions.id] });
                     });
 
                     controller.addMarker(marker);

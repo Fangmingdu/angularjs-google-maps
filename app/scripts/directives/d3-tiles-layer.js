@@ -71,10 +71,28 @@ d3.geo.tile = function() {
  *   </map>
  */
 /*jshint -W089*/
-ngMap.directive('d3TilesLayer', ['Attr2Options', '$window', '$templateCache', '$http',  function(Attr2Options, $window, $templateCache, $http) {
+ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Options, $window) {
     var parser = Attr2Options;
 
     TileOverlay.prototype = new google.maps.OverlayView();
+
+    function getQuardKey(x,y,z){
+        var quadKey = [];
+        for (var i = z; i > 0; i--) {
+            var digit = '0';
+            var mask = 1 << (i - 1);
+            if ((x & mask) != 0) {
+                digit++;
+            }
+            if ((y & mask) != 0) {
+                digit++;
+                digit++;
+            }
+            quadKey.push(digit);
+        }
+        return quadKey.join('');
+    };
+
     /** @constructor */
     function TileOverlay(controller,options,currentScope) {
 
@@ -105,16 +123,12 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window', '$templateCache', '$
             .style("height", $window.innerHeight + "px")
             .style('position','absolute');
 
-        //tooltip div
-        var tooltip = d3.select(this.getPanes().floatPane).append("div").attr("class","axio-map-tooltip");
-
         //current private variable
         var options = this.options,
-            requestUrl = options.tileoptions.urls[0].url,
             overlayProjection = this.getProjection(),
             markers_map = {},
-            tooltipContent = $templateCache.get(options.markeroptions.tooltiptemplate),
-            sizeMap = {10:0.1,11:0.15,12:0.25,13:0.35,14:0.5,15:0.75,16:1,17:1,18:1,19:1};
+            sizeMap = {10:0.2,11:0.3,12:0.4,13:0.6,14:0.7,15:0.8,16:1,17:1,18:1,19:1},
+            currentQuardKeys = [];
 
         var scope = this.getScope();
 
@@ -171,9 +185,9 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window', '$templateCache', '$
         /**
          *
          * */
-        function getMarkerIcon(map,url){
-            var width = options.markeroptions.iconwidth,
-                height = options.markeroptions.iconheight;
+        function getMarkerIcon(map,url,currentMarkerConfig){
+            var width = currentMarkerConfig.iconwidth,
+                height = currentMarkerConfig.iconheight;
 
             var image = {
                 url: url,
@@ -184,115 +198,105 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window', '$templateCache', '$
             return image;
         }
 
-        /**
-         * get tooltip from data
-         *
-         * */
-        function getTooltipContent(tooltipHtml,property){
-
-            var submarketGradeColor = "color:red";
-            if(property.gradeinsubmarket.indexOf('A') !== -1){
-                submarketGradeColor = "color:gold";
+        function getOccName(occid){
+            //0,1,5 -> stablized,  3,4 -> lease_up, 2->uc, 6 -> planned
+            if(occid === 0 || occid === 1 || occid===5){
+                return 'Stablized';
             }
-            else if(property.gradeinsubmarket.indexOf('B') !== -1){
-                submarketGradeColor = "color:green";
+            else if(occid === 3 || occid ===4){
+                return 'Lease Up';
             }
-
-            var ergImg = property.erg >=0 ?  options.markeroptions.img.arrowup : options.markeroptions.img.arrowdown;
-            var occchangeImg = property.occchange >=0 ? options.markeroptions.img.arrowup : options.markeroptions.img.arrowdown;
-
-            var tooltip = tooltipHtml.replace(/{{propertyid}}/g, property.propertyid)
-                .replace(/{{name}}/g,property.name)
-                .replace(/{{address}}/g,property.address+" " +property.city+" "+ property.st)
-                .replace(/{{rent}}/g, "$"+property.erent.toFixed(2))
-                .replace(/{{erg}}/g,(property.erg*100).toFixed(2) + "%")
-                .replace(/{{ergImg}}/g,ergImg)
-                .replace(/{{occ}}/g,parseInt(property.occ*100) + "%")
-                .replace(/{{occChange}}/g,(property.occchange*100).toFixed(2) + "%")
-                .replace(/{{occImg}}/g,occchangeImg)
-                .replace(/{{submarketGradeColor}}/g,submarketGradeColor)
-                .replace(/{{submarketGrade}}/g,property.gradeinsubmarket);
-
-            return tooltip;
-        }
+            else if(occid === 2){
+                return 'Under Construction';
+            }
+            else if(occid === 6){
+                return 'Planned';
+            }
+        };
 
         /**
          *
          *
          * */
-        function loadMarkers(map,controller,groupId,json){
-            //clear circles
-            markers_map[groupId] = [];
+        function loadMarkers(map,controller,groupId,json,config){
 
             var markeroptions = {},
-                icon = getMarkerIcon(map,options.markeroptions.icon);
+                markersids = [],
+                currentMarkerConfig = options.markeroptions[config.id];
+
+            if(! (groupId in markers_map)){
+                markers_map[groupId] = [];
+            };
 
             json.features.filter(function(d){return d.geometry.type === 'Point';})
                 .forEach(function(d){
-                    markers_map[groupId].push(d.properties[options.markeroptions.id]);
 
-                    markeroptions.position = new google.maps.LatLng(d.geometry.coordinates[1], d.geometry.coordinates[0]);
-                    markeroptions.id = d.properties[options.markeroptions.id];
-                    markeroptions.icon = icon;
+                    var currentId = d.properties[currentMarkerConfig.id];
+                    if(markers_map[groupId].indexOf(currentId) === -1){
+                        markers_map[groupId].push(currentId);
+                        markersids.push(currentId);
 
-                    //load data to markers object
-                    d.properties.lat = d.geometry.coordinates[1];
-                    d.properties.lng = d.geometry.coordinates[0];
-                    markeroptions.data = d.properties;
+                        markeroptions.position = new google.maps.LatLng(d.geometry.coordinates[1], d.geometry.coordinates[0]);
+                        markeroptions.id = currentId;
+                        markeroptions.icon = getMarkerIcon(map,d.properties.picon,currentMarkerConfig); //pcion is the icon field from the properties
+                        markeroptions.markerType = config.id;
 
-                    var marker = new google.maps.Marker(markeroptions);
+                        //load data to markers object
+                        d.properties.lat = d.geometry.coordinates[1];
+                        d.properties.lng = d.geometry.coordinates[0];
+                        d.properties.occname = getOccName(d.properties.occid);
+                        markeroptions.data = d.properties;
 
-                    //add mouseover ifnowindow
-                    var localTooltip = getTooltipContent(tooltipContent,d.properties);
+                        var marker = new google.maps.Marker(markeroptions);
+                        if(config.tooltip){
 
-                    google.maps.event.addListener(marker, 'mouseover', function(ev){
+                            google.maps.event.addListener(marker, 'mouseover', function(ev){
 
-                        // no events emit for unvisible markers
-                        if(marker.getOpacity() === 0){
-                            return;
+                                // no events emit for unvisible markers
+                                if(marker.getOpacity() === 0){
+                                    return;
+                                };
+                                scope.$emit('markerMouseover', {position: overlayProjection.fromLatLngToContainerPixel(ev.latLng), latLng: ev.latLng, marker: marker, type: config.id });
+                            });
+
+                            google.maps.event.addListener(marker, 'mouseout', function(ev){
+
+                                // no events emit for unvisible markers
+                                if(marker.getOpacity() === 0){
+                                    return;
+                                };
+
+                                scope.$emit('markerMouseout',{position: overlayProjection.fromLatLngToContainerPixel(ev.latLng), latLng: ev.latLng, marker: marker, type: config.id });
+                            });
                         };
 
-                        tooltip.html(localTooltip);
-                        var ne = overlayProjection.fromLatLngToDivPixel(ev.latLng);
-                        tooltip.style("left",(ne.x - options.markeroptions.tooltipWidth/2 + 5)+"px").style("top",(ne.y- options.markeroptions.tooltipHeight - options.markeroptions.iconheight * sizeMap[map.getZoom()] - 3)+"px");
-                        tooltip.style("visibility","visible");
-                    });
+                        google.maps.event.addListener(marker, 'click', function () {
 
-                    google.maps.event.addListener(marker, 'mouseout', function(ev){
+                            // no events emit for unvisible markers
+                            if(marker.getOpacity() === 0){
+                                return;
+                            };
 
-                        // no events emit for unvisible markers
-                        if(marker.getOpacity() === 0){
-                            return;
-                        };
+                            scope.$emit('markerClicked',{data: d.properties,marker:marker});
+                        });
 
-                        tooltip.style("visibility","hidden");
-                    });
+                        google.maps.event.addListener(marker,'rightclick',function(e){
 
-                    google.maps.event.addListener(marker, 'click', function () {
+                            // no events emit for unvisible markers
+                            if(marker.getOpacity() === 0){
+                                return;
+                            };
 
-                        // no events emit for unvisible markers
-                        if(marker.getOpacity() === 0){
-                            return;
-                        };
+                            scope.$emit('markerRightClicked', {position: overlayProjection.fromLatLngToContainerPixel(e.latLng), latLng: e.latLng, id: d.properties[currentMarkerConfig.id], type: config.id, data: d.properties });
+                        });
 
-                        scope.$emit('markerClicked',{data: d.properties,marker:marker});
-                    });
+                        controller.addMarker(marker);
 
-                    google.maps.event.addListener(marker,'rightclick',function(e){
-
-                        // no events emit for unvisible markers
-                        if(marker.getOpacity() === 0){
-                            return;
-                        };
-
-                        scope.$emit('markerRightClicked', {position: overlayProjection.fromLatLngToContainerPixel(e.latLng), latLng: e.latLng, id: d.properties[options.markeroptions.id] });
-                    });
-
-                    controller.addMarker(marker);
+                    };
 
                 });
 
-            scope.$emit('markersLoaded', {});
+            scope.$emit('markersLoaded', {id:config.id,markers:markersids});
         }
 
         /**
@@ -301,17 +305,17 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window', '$templateCache', '$
          * or google markers
          *
          * */
-        function loadFeatures(map,controller,svg,json,groupId){
+        function loadFeatures(map,controller,svg,json,groupId,config){
 
             if(json){
                 //load polygons
-                svg.selectAll("path")
-                    .data(json.features.filter(function(d){return d.geometry.type === 'Polygon';}))
-                    .enter().append("path")
-                    .attr("class", function(d) { return d.properties.kind; })
-                    .attr("d", tilePath);
+                //svg.selectAll("path")
+                //    .data(json.features.filter(function(d){return d.geometry.type === 'Polygon';}))
+                //    .enter().append("path")
+                //    .attr("class", function(d) { return d.properties.kind; })
+                //    .attr("d", tilePath);
 
-                loadMarkers(map,controller,groupId,json);
+                loadMarkers(map,controller,groupId,json,config);
             }
         };
 
@@ -322,13 +326,16 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window', '$templateCache', '$
          * call load feature functions
          *
          * */
-        function reDraw(map,controller,translate_x,translate_y){
+        function reDraw(map,controller,translate_x,translate_y,force_redraw){
             //current tiles
             var tiles = tile
                 .zoom(map.getZoom())
                 .sw(map.getBounds().getSouthWest())
                 .ne(map.getBounds().getNorthEast())();
 
+            if(force_redraw){
+                overlaysvg.selectAll("g.tile").remove();
+            };
             //selection
             var image = overlaysvg.selectAll("g.tile").data(tiles, function(d) {
                 return d;
@@ -337,27 +344,49 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window', '$templateCache', '$
             //tiles exit and remove data
             image.exit().each(function(d) {
 
-                if(this._xhr){
-                    this._xhr.abort();
-                }
+                if(this._xhr && this._xhr.length > 0){
+                    this._xhr.forEach(function(e){
+                        e.abort();
+                    });
 
-                //
+                    this._xhr = [];
+                };
+
                 var groupId = d[0] + '-' + d[1] + '-' + d[2];
 
                 clearMarkers(map,groupId);
 
             }).remove();
 
-            //
+            scope.$emit('tiles.loaded.len', { len: image.data().length - image.data().filter(function (d) { return !angular.isUndefined(d) }).length });
+
             image.enter().append("g").attr("class", "tile").each(function(d) {
-                var group = d3.select(this);
-                var url = requestUrl + d[2] + "/" + d[0] + "/" + d[1] + ".json";
-                if(map.getZoom() >= options.tileoptions.urls[0].zoom){
-                    this._xhr = d3.json(url, function(error, json) {
-                        //load features
-                        loadFeatures(map,controller,group,json,d[0]+'-'+d[1]+'-'+d[2]);
-                    });
+                var group = d3.select(this),
+                    tempXHR = [];
+                if(!this._xhr){
+                    this._xhr = [];
+                };
+
+                options.tileoptions.urls.forEach(function(elem,index){
+                    if(map.getZoom() >= elem.zoom && elem.visible){
+                        var url = elem.url + d[2] + "/" + d[0] + "/" + d[1];// + ".json";
+
+                        var xhr = d3.json(url, function(error, json) {
+                            //load features
+                            loadFeatures(map,controller,group,json,d[0]+'-'+d[1]+'-'+d[2],elem);
+                        });
+
+                        tempXHR.push(xhr);
+                    };
+                });
+
+                if(tempXHR.length > 0){
+                    this._xhr = tempXHR;
                 }
+                else{
+                    this._xhr = [];
+                };
+
             });
 
             image.attr("transform", "translate(" + translate_x + "," + translate_y + ")");
@@ -381,25 +410,44 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window', '$templateCache', '$
 
         };
 
-        TileOverlay.prototype.showTooltip = function(marker,map){
-            //get marker position, data and refresh tooltip
-
-            var localTooltip = getTooltipContent(tooltipContent,marker.data);
-
-            tooltip.html(localTooltip);
-            var ne = overlayProjection.fromLatLngToDivPixel(marker.getPosition());
-            tooltip.style("left",(ne.x - options.markeroptions.tooltipWidth/2 + 5)+"px").style("top",(ne.y- options.markeroptions.tooltipHeight - options.markeroptions.iconheight * sizeMap[map.getZoom()] - 3)+"px"); //
-
-            tooltip.style("visibility","visible");
-        };
-
-        TileOverlay.prototype.hideTooltip = function(){
-            tooltip.style("visibility","hidden");
-        };
-
         TileOverlay.prototype.project = function(latLng){
             return overlayProjection.fromLatLngToContainerPixel(latLng);
-        }
+        };
+
+        TileOverlay.prototype.toggleLayer = function(map,visibleLayers){
+
+            clearMarkers(map);
+
+            options.tileoptions.urls.forEach(function(elem) {
+                if (visibleLayers.indexOf(elem.id) !== -1) {
+                    elem.visible = true;
+                }
+                else {
+                    elem.visible = false;
+                };
+            });
+
+            reDraw(map,this.controller,this.translate_x,this.translate_y,true);
+        };
+
+        TileOverlay.prototype.slideTime = function(map,time){
+
+            clearMarkers(map);
+
+            options.tileoptions.urls.forEach(function(elem) {
+                elem.url = elem.url.replace(/([0-9]+-)+[0-9]+/g,time);
+            });
+
+            reDraw(map,this.controller,this.translate_x,this.translate_y,true);
+        };
+
+        TileOverlay.prototype.setTime = function(time){
+
+            options.tileoptions.urls.forEach(function(elem) {
+                elem.url = elem.url.replace(/([0-9]+-)+[0-9]+/g,time);
+            });
+        };
+
     };
 
     return {

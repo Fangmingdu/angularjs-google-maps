@@ -1133,6 +1133,15 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
     };
 
     /**
+     * add vector tiles access domain
+     * */
+    TileOverlay.prototype.setUrlDomain = function(domain){
+        this.options.tileoptions.urls.forEach(function(elem) {
+            elem.url = domain + elem.url;
+        });
+    };
+
+    /**
      * setVisibleLayer is used to initilize map with different visible layer
      *
      * */

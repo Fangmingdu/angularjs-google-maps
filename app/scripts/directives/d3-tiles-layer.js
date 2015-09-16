@@ -200,16 +200,16 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
 
         function getOccName(occid){
             //0,1,5 -> stablized,  3,4 -> lease_up, 2->uc, 6 -> planned
-            if(occid === 0 || occid === 1 || occid===5){
-                return 'Stablized';
+            if(occid === 0 || occid === 1 || occid===5 || occid === 20 || occid ===21 || occid === 25){
+                return 'Stabilized';
             }
-            else if(occid === 3 || occid ===4){
+            else if(occid === 3 || occid ===4 || occid === 23 || occid === 24){
                 return 'Lease Up';
             }
-            else if(occid === 2){
+            else if(occid === 2 || occid === 22){
                 return 'Under Construction';
             }
-            else if(occid === 6){
+            else if(occid === 6 || occid === 26){
                 return 'Planned';
             }
         };
@@ -306,18 +306,34 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
          *
          * */
         function loadFeatures(map,controller,svg,json,groupId,config){
+            //load polygons
+            //svg.selectAll("path")
+            //    .data(json.features.filter(function(d){return d.geometry.type === 'Polygon';}))
+            //    .enter().append("path")
+            //    .attr("class", function(d) { return d.properties.kind; })
+            //    .attr("d", tilePath);
 
-            if(json){
-                //load polygons
-                //svg.selectAll("path")
-                //    .data(json.features.filter(function(d){return d.geometry.type === 'Polygon';}))
-                //    .enter().append("path")
-                //    .attr("class", function(d) { return d.properties.kind; })
-                //    .attr("d", tilePath);
-
-                loadMarkers(map,controller,groupId,json,config);
-            }
+            loadMarkers(map,controller,groupId,json,config);
         };
+
+        /**
+        *
+        * */
+        function forceRemove(element,selector){
+            element.selectAll(selector).
+                each(function(d){
+                    if(this._xhr && this._xhr.length > 0){
+                        this._xhr.forEach(function(e){
+                            e.abort();
+                        });
+
+                        this._xhr = [];
+                    };
+                });
+
+            element.selectAll(selector).remove();
+        };
+
 
         /**
          * re draw function
@@ -334,7 +350,7 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
                 .ne(map.getBounds().getNorthEast())();
 
             if(force_redraw){
-                overlaysvg.selectAll("g.tile").remove();
+                forceRemove(overlaysvg,"g.tile");//overlaysvg.selectAll("g.tile").remove();
             };
             //selection
             var image = overlaysvg.selectAll("g.tile").data(tiles, function(d) {
@@ -372,8 +388,13 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
                         var url = elem.url + d[2] + "/" + d[0] + "/" + d[1];// + ".json";
 
                         var xhr = d3.json(url, function(error, json) {
-                            //load features
-                            loadFeatures(map,controller,group,json,d[0]+'-'+d[1]+'-'+d[2],elem);
+                            if(error || json === undefined){
+                                scope.$emit('markersLoaded', {});
+                            }
+                            else{
+                                //load features
+                                loadFeatures(map,controller,group,json,d[0]+'-'+d[1]+'-'+d[2],elem);
+                            };
                         });
 
                         tempXHR.push(xhr);
@@ -392,9 +413,16 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
             image.attr("transform", "translate(" + translate_x + "," + translate_y + ")");
         }
 
-        TileOverlay.prototype.draw = function() {
+        TileOverlay.prototype.clearMarkers = function(map) {
+            //clear all markers
+            if(map){
+                clearMarkers(map);
+            };
+        };
+
+        TileOverlay.prototype.draw = function(foreceRedraw) {
             //re draw tiles
-            reDraw(this.map,this.controller,this.translate_x,this.translate_y);
+            reDraw(this.map,this.controller,this.translate_x,this.translate_y,!!foreceRedraw);
         };
 
         TileOverlay.prototype.dragged = function() {
@@ -403,7 +431,7 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
             this.translate_y = -Math.round(this.getProjection().fromLatLngToDivPixel(this.map.getBounds().getNorthEast()).y);
 
             //move svg element
-            overlaysvg.style('left', -this.translate_x).style('top', -this.translate_y);
+            overlaysvg.style('left', -this.translate_x + 'px').style('top', -this.translate_y + 'px');
 
             //re draw all tiles
             reDraw(this.map,this.controller,this.translate_x,this.translate_y);
@@ -441,13 +469,31 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
             reDraw(map,this.controller,this.translate_x,this.translate_y,true);
         };
 
-        TileOverlay.prototype.setTime = function(time){
+    };
 
-            options.tileoptions.urls.forEach(function(elem) {
-                elem.url = elem.url.replace(/([0-9]+-)+[0-9]+/g,time);
-            });
-        };
+    /**
+     * change requested property history time
+     * */
+    TileOverlay.prototype.setTime = function(time){
+        this.options.tileoptions.urls.forEach(function(elem) {
+            elem.url = elem.url.replace(/([0-9]+-)+[0-9]+/g,time);
+        });
+    };
 
+    /**
+     * setVisibleLayer is used to initilize map with different visible layer
+     *
+     * */
+    TileOverlay.prototype.setVisibleLayer = function(layerIds) {
+
+        this.options.tileoptions.urls.forEach(function(elem) {
+            if (layerIds.indexOf(elem.id) !== -1) {
+                elem.visible = true;
+            }
+            else {
+                elem.visible = false;
+            };
+        });
     };
 
     return {

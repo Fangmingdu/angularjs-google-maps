@@ -190,7 +190,7 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
                 height = currentMarkerConfig.iconheight;
 
             var image = {
-                url: url,
+                url: currentMarkerConfig.path + url,
                 // This marker is 20 pixels wide by 32 pixels tall.  32, 37
                 scaledSize: new google.maps.Size(width*sizeMap[map.getZoom()], height*sizeMap[map.getZoom()])
             };
@@ -395,7 +395,7 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
                                 //load features
                                 loadFeatures(map,controller,group,json,d[0]+'-'+d[1]+'-'+d[2],elem);
                             };
-                        });
+                        }).on("beforesend", function (request) {request.withCredentials = true;});
 
                         tempXHR.push(xhr);
                     };

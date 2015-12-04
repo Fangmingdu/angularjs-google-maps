@@ -1037,7 +1037,7 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
 
                 options.tileoptions.urls.forEach(function(elem,index){
                     if(map.getZoom() >= elem.zoom && elem.visible){
-                        var url = elem.url + d[2] + "/" + d[0] + "/" + d[1];// + ".json";
+                        var url = elem.url + d[2] + "/" + d[0] + "/" + d[1] + '?pa=' + elem.pipeline;// + ".json";
 
                         var xhr = d3.json(url, function(error, json) {
                             if(error || json === undefined){
@@ -1154,6 +1154,17 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
             else {
                 elem.visible = false;
             };
+        });
+    };
+
+    /**
+     * set pipeline access in url parameter
+     *
+     * */
+    TileOverlay.prototype.setPipelineAccess = function(access) {
+
+        this.options.tileoptions.urls.forEach(function(elem) {
+            elem.pipeline = access[elem.id];
         });
     };
 

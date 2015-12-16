@@ -986,6 +986,17 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
             element.selectAll(selector).remove();
         };
 
+        function getVisible() {
+            var visible = false;
+            options.tileoptions.urls.forEach(function(elem,index) {
+                if(elem.visible){
+                    visible = true;
+                };
+            });
+
+            return visible;
+        };
+
 
         /**
          * re draw function
@@ -1026,6 +1037,10 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
 
             }).remove();
 
+            if(!getVisible()){
+                return;
+            };
+
             scope.$emit('tiles.loaded.len', { len: image.data().length - image.data().filter(function (d) { return !angular.isUndefined(d) }).length });
 
             image.enter().append("g").attr("class", "tile").each(function(d) {
@@ -1041,7 +1056,12 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
 
                         var xhr = d3.json(url, function(error, json) {
                             if(error || json === undefined){
-                                scope.$emit('markersLoaded', {});
+                                if(error.status === 401) {
+                                    scope.$emit('unauthorized',{});
+                                }
+                                else{
+                                    scope.$emit('markersLoaded', {});
+                                };
                             }
                             else{
                                 //load features

@@ -864,6 +864,9 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
             else if(occid === 6 || occid === 26){
                 return 'Planned';
             }
+            else if(occid === 8) {
+                return 'In Progress';
+            };
         };
 
         /**
@@ -898,6 +901,7 @@ ngMap.directive('d3TilesLayer', ['Attr2Options', '$window',  function(Attr2Optio
                         d.properties.lng = d.geometry.coordinates[0];
                         d.properties.occname = getOccName(d.properties.occid);
                         markeroptions.data = d.properties;
+                        markeroptions.highlightable = (d.properties.occid !== 8);
 
                         var marker = new google.maps.Marker(markeroptions);
                         if(config.tooltip){
